@@ -479,7 +479,7 @@
             } else if (index < (maxWindowsPerSide * 2) + maxVerticalWindows) {
                 // 🔴 **FIX: Move Bottom Row UP Properly**
                 posX = browserX + screenWidth - ((index - (maxWindowsPerSide + maxVerticalWindows) + 1) * (windowWidth + spacing));
-                posY = browserY + screenHeight - (3 * windowHeight); // 🔺 Move UP 3 window heights
+                posY = browserY + screenHeight - (1 * windowHeight); // 🔺 Move UP 3 window heights
             } else {
                 // 🔴 **FIX: Adjust Left Column to Stay Inside Second Screen**
                 posX = browserX;
