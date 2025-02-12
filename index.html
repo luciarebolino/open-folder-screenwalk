@@ -433,7 +433,6 @@ document.getElementById('yes-button').addEventListener('click', async () => {
         const response = await fetch('datacomplete.json');
         const jsonData = await response.json();
 
-        // Detect the screen where the Open Folder webpage is located
         const browserX = window.screenLeft || window.screenX;
         const browserY = window.screenTop || window.screenY;
         const screenWidth = window.innerWidth;
@@ -469,19 +468,19 @@ document.getElementById('yes-button').addEventListener('click', async () => {
             let posX, posY;
 
             if (index < maxWindowsPerSide) {
-                // Top row
+                // Top row (left to right)
                 posX = browserX + (index * (windowWidth + spacing));
                 posY = browserY;
             } else if (index < maxWindowsPerSide + maxVerticalWindows) {
-                // Right column
+                // Right column (top to bottom)
                 posX = browserX + screenWidth - windowWidth;
                 posY = browserY + (index - maxWindowsPerSide) * (windowHeight + spacing);
             } else if (index < (maxWindowsPerSide * 2) + maxVerticalWindows) {
-                // Bottom row (unchanged, keeping it as before)
+                // Bottom row (right to left, starting from bottom-right)
                 posX = browserX + screenWidth - ((index - (maxWindowsPerSide + maxVerticalWindows) + 1) * (windowWidth + spacing));
-                posY = browserY + screenHeight - windowHeight;
+                posY = browserY + screenHeight - windowHeight; // Keep it at the bottom line
             } else {
-                // Left column
+                // Left column (bottom to top)
                 posX = browserX;
                 posY = browserY + screenHeight - ((index - ((maxWindowsPerSide * 2) + maxVerticalWindows) + 1) * (windowHeight + spacing));
             }
@@ -527,8 +526,6 @@ document.getElementById('yes-button').addEventListener('click', async () => {
         console.error('Error fetching the JSON data:', error);
     }
 });
-
-
 
 
 
