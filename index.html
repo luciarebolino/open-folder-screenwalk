@@ -476,9 +476,9 @@ document.getElementById('yes-button').addEventListener('click', async () => {
                 posX = browserX + screenWidth - windowWidth;
                 posY = browserY + (index - maxWindowsPerSide) * (windowHeight + spacing);
             } else if (index < (maxWindowsPerSide * 2) + maxVerticalWindows) {
-                // Bottom row (right to left, starting from bottom-right)
+                // Bottom row (right to left) - Shifted one row down
                 posX = browserX + screenWidth - ((index - (maxWindowsPerSide + maxVerticalWindows) + 1) * (windowWidth + spacing));
-                posY = browserY + screenHeight - windowHeight; // Keep it at the bottom line
+                posY = browserY + screenHeight; // Shifted 1 row down
             } else {
                 // Left column (bottom to top)
                 posX = browserX;
