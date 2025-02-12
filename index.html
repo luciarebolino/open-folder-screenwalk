@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>OPEN FOLDER</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 0;
+            overflow: hidden;
+        }
+        .node {
+            box-sizing: border-box;
+            border: 1px solid white;
+            overflow: hidden;
+            position: absolute;
+            text-align: center;
+        }
+        .node .label {
+            font-size: 12px;
+            color: white;
+        }
+        .legend {
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .legend rect {
+            stroke-width: 2;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #floating-folder {
+            position: absolute;
+            width: 100px; /* Adjust size as needed */
+            height: 100px; /* Adjust size as needed */
+            z-index: 1000; /* Ensure it stays on top */
+            cursor: pointer;
+        }
+        #popup {
+            display: none; /* Initially hidden */
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            z-index: 1001;
+            text-align: center;
+        }
+        #popup button {
+            margin: 5px;
+        }
+        #overlay {
+            display: none; /* Initially hidden */
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <label for="treemap-tile">Tile Method:</label>
+        <select id="treemap-tile">
+            <option value="treemapSquarify">Squarify</option>
+            <option value="treemapBinary">Binary</option>
+            <option value="treemapDice">Dice</option>
+            <option value="treemapSlice">Slice</option>
+            <option value="treemapSliceDice">SliceDice</option>
+            <option value="treemapResquarify">Resquarify</option>
+        </select>
+
+        <label for="nesting-order">Nesting Order:</label>
+        <input type="radio" name="nesting-order" value="1" checked> Source > Category > Keyword
+        <input type="radio" name="nesting-order" value="2"> Category > Source > Keyword
+    </div>
+    <div id="svg"></div>
+    <div id="legend"></div>
+
+    <!-- Add the floating image -->
+    <img id="floating-folder" src="folder.png" alt="Floating Folder">
+
+    <!-- Popup elements -->
+    <div id="overlay"></div>
+    <div id="popup">
+        <p>Open?</p>
+        <button id="yes-button">Yes</button>
+        <button id="no-button">No</button>
+    </div>
+
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        var tiles = {
+            "treemapSquarify": d3.treemapSquarify,
+            "treemapBinary": d3.treemapBinary,
+            "treemapDice": d3.treemapDice,
+            "treemapSlice": d3.treemapSlice,
+            "treemapSliceDice": d3.treemapSliceDice,
+            "treemapResquarify": d3.treemapResquarify
+        };
+
+        var hasNestingOrderChanged = false;
+        var data, reversed_data;
+
+        // Placeholder for acronyms
+        var acronyms = {
+            // Define your acronyms here
+            // "NASA": { "name": "National Aeronautics and Space Administration" }
+        };
+
+        d3.json("data.json").then(originalData => {
+            data = clean_data_treemap(originalData);
+            reversed_data = changeNesting(data);
+            create_treemap(data, "treemapSquarify");
+        });
+
+        var fetchImages = async (keyword) => {
+            const simpleKeyword = keyword.split(' ')[0];  // Get the first word of the keyword
+            const url = `https://images-api.nasa.gov/search?q=${keyword}&media_type=image`;
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.collection.items.length > 0) {
+                    return data.collection.items.map(item => item.links[0].href);
+                } else {
+                    // Fallback to using the simple keyword if no images were found with the full keyword
+                    const simpleUrl = `https://images-api.nasa.gov/search?q=${simpleKeyword}&media_type=image`;
+                    const simpleResponse = await fetch(simpleUrl);
+                    const simpleData = await simpleResponse.json();
+
+                    if (simpleData.collection.items.length > 0) {
+                        return simpleData.collection.items.map(item => item.links[0].href);
+                    } else {
+                        // Use a default image if both fetches fail
+                        return ['default-image.jpg'];
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching images:', error);
+                // If there's a network error or other issues, return a default image
+                return ['default-image.jpg'];
+            }
+        };
+
+
+        var imageIndexMap = {};
+
+        var create_treemap = async (data, tile) => {
+            let format = d3.format(",d");
+            let legendKeys = [];
+            let margin = ({ top: 0, right: 0, bottom: 5, left: 0 });
+
+            let width = window.innerWidth;
+            let height = window.innerHeight;
+
+            let treemap = data => d3.treemap()
+                .tile(tiles[tile])
+                .size([width, height])
+                .padding(1.5)
+                .round(true)
+                (d3.hierarchy(data)
+                .sum(d => d.value)
+                .sort((a, b) => b.value - a.value));
+
+            let chart = async () => {
+                const root = treemap(data);
+
+                const svg = d3.select("#svg").append("svg")
+                    .attr("viewBox", [0, 0, width + margin.left + margin.right, height + margin.top + margin.bottom])
+                    .style("font", "0.6em sans-serif");
+
+                const leaf = svg.selectAll("g")
+                    .data(root.leaves())
+                    .join("g")
+                    .attr("transform", d => `translate(${d.x0 + margin.left}, ${d.y0 + margin.top})`);
+
+                leaf.append("title")
+                    .text(d => {
+                        let arr = d.ancestors().reverse().map(d => d.data.name);
+                        let outStr;
+                        if (hasNestingOrderChanged) {
+                            outStr = `Keyword: ${d.data.name}\nUpload Source: ${arr[2]}\nCategory: ${arr[1]}\n\nCount: ${format(d.value)}`;
+                        } else {
+                            outStr = `Keyword: ${d.data.name}\nUpload Source: ${arr[1]}\nCategory: ${arr[2]}\n\nCount: ${format(d.value)}`;
+                        }
+                        return outStr;
+                    });
+
+                const imagesList = await Promise.all(root.leaves().map(d => fetchImages(d.data.name)));
+
+                leaf.append("a")
+                    .attr("xlink:href", d => {
+                        let arr = d.ancestors().reverse().map(d => d.data.name);
+                        let outStr;
+                        if (hasNestingOrderChanged) {
+                            outStr = `Keyword: ${d.data.name}\nUpload Source: ${arr[2]}\nCategory: ${arr[1]}\n\nCount: ${format(d.value)}`;
+                        } else {
+                            outStr = `Keyword: ${d.data.name}\nUpload Source: ${arr[1]}\nCategory: ${arr[2]}\n\nCount: ${format(d.value)}`;
+                        }
+                        return `https://data.nasa.gov/browse?q=${d.data.name}\n+ ${arr[1]}\n+ ${arr[2]}\n\n&sortBy=relevance`;
+                    })
+                    .append("foreignObject")
+                    .attr("width", d => d.x1 - d.x0)
+                    .attr("height", d => d.y1 - d.y0)
+                    .append("xhtml:div")
+                    .style("margin", "0")
+                    .style("padding", "0")
+                    .style("background", "none")
+                    .each((d, i, nodes) => {
+                        let keyword = d.data.name;
+                        let images = imagesList[i];
+                        let container = d3.select(nodes[i]);
+
+                        if (!imageIndexMap[keyword]) {
+                            imageIndexMap[keyword] = 0;
+                        }
+
+                        let interval = (60 / d.value) * 1000;  // Calculate the interval
+
+                        setInterval(() => {
+                            container.html(`<img src="${images[imageIndexMap[keyword]]}" style="width: 100%; height: 100%; object-fit: cover;">`);
+                            imageIndexMap[keyword] = (imageIndexMap[keyword] + 1) % images.length;
+                        }, interval);
+                    });
+
+                var svg2 = d3.select("#legend")
+                    .append("svg")
+                    .attr("width", 500)
+                    .attr("height", 25 * legendKeys.length);
+
+                var legend = svg2.append("g")
+                    .attr("class", "legend")
+                    .attr('transform', 'translate(-20, 13)');
+
+                legend.append('g')
+                    .selectAll('.legend-group')
+                    .data(legendKeys)
+                    .join('g')
+                    .attr('class', 'legend')
+                    .attr('transform', (d, i) => `translate(20, ${i * 23})`)
+                    .append('rect')
+                    .attr('fill', (d) => color(d))
+                    .attr('opacity', 0.7)
+                    .attr('width', 15)
+                    .attr('height', 15)
+                    .attr('rx', 3);
+
+                legend.selectAll('.legend')
+                    .append('text')
+                    .attr('font-size', "1em")
+                    .attr('transform', (d, i) => `translate(19, 12)`)
+                    .attr("class", "legend-text")
+                    .text((d) => { return d; })
+                    .on("click", (d) => {
+                        document.location.href = `https://data.nasa.gov/browse?q=${d}&sortBy=relevance`;
+                    });
+            };
+            await chart();
+        };
+
+        var ID = (type) => {
+            let out = {};
+            let id_num = Math.random().toString(36).substr(2, 9);
+            out["id"] = `O-${type}-${id_num}`;
+            out["href"] = `${window.location.href}#${out["id"]}`;
+            return out;
+        };
+
+        var swap_acronyms = (str) => {
+            if (str in acronyms) {
+                return toTitleCase(acronyms[str]["name"]);
+            } else {
+                return toTitleCase(str);
+            }
+        };
+
+        var clean_data_treemap = (data) => {
+            for (let i = 0; i < data["children"].length; i++) {
+                data["children"][i]["name"] = swap_acronyms(data["children"][i]["name"]);
+                for (let j = 0; j < data["children"][i]["children"].length; j++) {
+                    data["children"][i]["children"][j]["name"] = swap_acronyms(data["children"][i]["children"][j]["name"]);
+                    if (data["children"][i]["children"][j]["children"].length === 0) {
+                        data["children"][i]["children"].splice(j, 1);
+                        j--;
+                    }
+                }
+                if (data["children"][i]["children"].length === 0) {
+                    data.children.splice(i, 1);
+                    i--;
+                }
+            }
+            return data;
+        };
+
+        var changeNesting = (data) => {
+            var out = { "name": "datasets", "children": [] };
+            var obj = {};
+            var temp_obj;
+            var temp_obj2;
+            var temp_obj3;
+
+            for (let i = 0; i < data["children"].length; i++) {
+                for (let j = 0; j < data["children"][i]["children"].length; j++) {
+                    if (data["children"][i]["children"][j]["children"].length !== 0) {
+                        if (!obj.hasOwnProperty(data["children"][i]["children"][j]["name"])) {
+                            obj[data["children"][i]["children"][j]["name"]] = {};
+                        }
+                        obj[data["children"][i]["children"][j]["name"]][data["children"][i]["name"]] = {};
+                        for (let x = 0; x < data["children"][i]["children"][j]["children"].length; x++) {
+                            obj[data["children"][i]["children"][j]["name"]][data["children"][i]["name"]][data["children"][i]["children"][j]["children"][x]["name"]] = data["children"][i]["children"][j]["children"][x]["value"];
+                        }
+                    }
+                }
+            }
+            for (let [category, cat_children] of Object.entries(obj)) {
+                temp_obj = {};
+                temp_obj["name"] = category;
+                temp_obj["children"] = [];
+
+                for (let [source, src_children] of Object.entries(cat_children)) {
+                    temp_obj2 = {};
+                    temp_obj2["name"] = source;
+                    temp_obj2["children"] = [];
+
+                    for (let [kw, count] of Object.entries(src_children)) {
+                        temp_obj3 = {};
+                        temp_obj3["name"] = kw;
+                        temp_obj3["value"] = count;
+                        temp_obj2["children"].push(temp_obj3);
+                    }
+                    temp_obj["children"].push(temp_obj2);
+                }
+                out["children"].push(temp_obj);
+            }
+            return out;
+        };
+
+        var toTitleCase = (str) => {
+            return str.replace(/\w\S*/g, function (txt) {
+                return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
+            });
+        };
+
+        $("div").on("change", "#treemap-tile", () => {
+            $("#svg").html("");
+            $("#legend").html("");
+            if (hasNestingOrderChanged) {
+                create_treemap(reversed_data, $("#treemap-tile").val());
+            } else {
+                create_treemap(data, $("#treemap-tile").val());
+            }
+        });
+
+        $("div").on("change", 'input[type=radio][name=nesting-order]', () => {
+            $("#svg").html("");
+            $("#legend").html("");
+            let nestingNum = $('input[type=radio][name=nesting-order]:checked').val();
+            if (nestingNum === "1") {
+                hasNestingOrderChanged = false;
+                create_treemap(data, $("#treemap-tile").val());
+            } else {
+                hasNestingOrderChanged = true;
+                create_treemap(reversed_data, $("#treemap-tile").val());
+            }
+        });
+
+        // Floating image code
+        const folderImg = document.getElementById('floating-folder');
+        let xPos = Math.random() * window.innerWidth;
+        let yPos = Math.random() * window.innerHeight;
+        let xSpeed = 2; // Speed in the x direction
+        let ySpeed = 2; // Speed in the y direction
+
+        function moveFolder() {
+            xPos += xSpeed;
+            yPos += ySpeed;
+
+            // Check for collision with the walls and reverse direction if needed
+            if (xPos + folderImg.width >= window.innerWidth || xPos <= 0) {
+                xSpeed *= -1; // Reverse direction on x-axis
+            }
+            if (yPos + folderImg.height >= window.innerHeight || yPos <= 0) {
+                ySpeed *= -1; // Reverse direction on y-axis
+            }
+
+            // Update the position of the image
+            folderImg.style.left = xPos + 'px';
+            folderImg.style.top = yPos + 'px';
+
+            requestAnimationFrame(moveFolder);
+        }
+
+        moveFolder(); // Start the animation
+
+        // Popup code
+        folderImg.addEventListener('click', () => {
+            document.getElementById('overlay').style.display = 'block';
+            document.getElementById('popup').style.display = 'block';
+        });
+
+        document.getElementById('no-button').addEventListener('click', () => {
+            document.getElementById('overlay').style.display = 'none';
+            document.getElementById('popup').style.display = 'none';
+        });
+
+ 
+
+
+
+
+
+
+
+        document.getElementById('yes-button').addEventListener('click', async () => {
+    document.getElementById('overlay').style.display = 'none';
+    document.getElementById('popup').style.display = 'none';
+
+    try {
+        const response = await fetch('datacomplete.json');
+        const jsonData = await response.json();
+
+        // Detect the screen where the Open Folder webpage is located
+        const browserX = window.screenLeft || window.screenX;  // Left boundary of second screen
+        const browserY = window.screenTop || window.screenY;   // Top boundary of second screen
+        const screenWidth = window.innerWidth;  // Width of second screen
+        const screenHeight = window.innerHeight; // Height of second screen
+
+        const windowWidth = 300;
+        const windowHeight = 100;
+        const spacing = -70; // Adjusted for better alignment
+
+        const maxWindowsPerSide = Math.floor(screenWidth / (windowWidth + spacing));
+        const maxVerticalWindows = Math.floor(screenHeight / (windowHeight + spacing));
+
+        let maxOpenWindows = Math.min((maxWindowsPerSide * 2) + (maxVerticalWindows * 2), jsonData.dataset.length);
+        let iterationCount = 0;
+        let openWindows = [];
+
+        function openNextWindow(index, callback) {
+            if (index >= maxOpenWindows) {
+                console.log(`Frame ${iterationCount + 1} completed. Waiting 5 minutes before the next frame...`);
+                iterationCount++;
+                setTimeout(() => {
+                    closeAllWindows(callback);
+                }, 300000); // Wait 5 minutes
+                return;
+            }
+
+            let dataset = jsonData.dataset[index];
+            if (!dataset.landingPage) {
+                openNextWindow(index + 1, callback);
+                return;
+            }
+
+            let posX, posY;
+
+            if (index < maxWindowsPerSide) {
+                // Top row
+                posX = browserX + (index * (windowWidth + spacing));
+                posY = browserY;
+            } else if (index < maxWindowsPerSide + maxVerticalWindows) {
+                // Right column
+                posX = browserX + screenWidth - windowWidth;
+                posY = browserY + (index - maxWindowsPerSide) * (windowHeight + spacing);
+            } else if (index < (maxWindowsPerSide * 2) + maxVerticalWindows) {
+                // 🔴 **FIX: Move Bottom Row UP Properly**
+                posX = browserX + screenWidth - ((index - (maxWindowsPerSide + maxVerticalWindows) + 1) * (windowWidth + spacing));
+                posY = browserY + screenHeight - (3 * windowHeight); // 🔺 Move UP 3 window heights
+            } else {
+                // 🔴 **FIX: Adjust Left Column to Stay Inside Second Screen**
+                posX = browserX;
+                posY = browserY + screenHeight - ((index - ((maxWindowsPerSide * 2) + maxVerticalWindows) + 1) * (windowHeight + spacing)) - (2 * windowHeight);
+            }
+
+            setTimeout(() => {
+                let newWindow = window.open(dataset.landingPage, '_blank', `width=${windowWidth},height=${windowHeight},top=${posY},left=${posX},noopener,noreferrer`);
+                
+                if (newWindow) {
+                    openWindows.push(newWindow);
+                    console.log(`Opened window ${index + 1}/${maxOpenWindows} at (${posX}, ${posY})`);
+                }
+
+                openNextWindow(index + 1, callback);
+            }, 10); // Small delay between opening each window
+        }
+
+        function closeAllWindows(callback) {
+            console.log("Closing all windows...");
+
+            openWindows.forEach(win => {
+                if (win && !win.closed) {
+                    win.close();
+                }
+            });
+
+            openWindows = [];
+
+            if (iterationCount < 5) {
+                console.log(`Starting frame ${iterationCount + 1} in 5 minutes...`);
+                setTimeout(() => {
+                    openNextWindow(0, callback);
+                }, 300000); // Wait 5 minutes before reopening
+            } else {
+                console.log("✅ Completed 5 iterations. Stopping.");
+            }
+        }
+
+        // Start the first frame
+        openNextWindow(0, () => {
+            console.log("First frame started.");
+        });
+
+    } catch (error) {
+        console.error('Error fetching the JSON data:', error);
+    }
+});
+
+
+
+
+
+
+
+
+
+
+
+    </script>
+</body>
+</html>
