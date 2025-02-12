@@ -425,7 +425,7 @@
 
 
 
-        document.getElementById('yes-button').addEventListener('click', async () => {
+document.getElementById('yes-button').addEventListener('click', async () => {
     document.getElementById('overlay').style.display = 'none';
     document.getElementById('popup').style.display = 'none';
 
@@ -434,14 +434,14 @@
         const jsonData = await response.json();
 
         // Detect the screen where the Open Folder webpage is located
-        const browserX = window.screenLeft || window.screenX;  // Left boundary of second screen
-        const browserY = window.screenTop || window.screenY;   // Top boundary of second screen
-        const screenWidth = window.innerWidth;  // Width of second screen
-        const screenHeight = window.innerHeight; // Height of second screen
+        const browserX = window.screenLeft || window.screenX;
+        const browserY = window.screenTop || window.screenY;
+        const screenWidth = window.innerWidth;
+        const screenHeight = window.innerHeight;
 
         const windowWidth = 300;
         const windowHeight = 100;
-        const spacing = -70; // Adjusted for better alignment
+        const spacing = -70;
 
         const maxWindowsPerSide = Math.floor(screenWidth / (windowWidth + spacing));
         const maxVerticalWindows = Math.floor(screenHeight / (windowHeight + spacing));
@@ -456,7 +456,7 @@
                 iterationCount++;
                 setTimeout(() => {
                     closeAllWindows(callback);
-                }, 300000); // Wait 5 minutes
+                }, 300000);
                 return;
             }
 
@@ -477,13 +477,13 @@
                 posX = browserX + screenWidth - windowWidth;
                 posY = browserY + (index - maxWindowsPerSide) * (windowHeight + spacing);
             } else if (index < (maxWindowsPerSide * 2) + maxVerticalWindows) {
-                // 🔴 **FIX: Move Bottom Row UP Properly**
+                // Bottom row (unchanged, keeping it as before)
                 posX = browserX + screenWidth - ((index - (maxWindowsPerSide + maxVerticalWindows) + 1) * (windowWidth + spacing));
-                posY = browserY + screenHeight - (1 * windowHeight); // 🔺 Move UP 3 window heights
+                posY = browserY + screenHeight - windowHeight;
             } else {
-                // 🔴 **FIX: Adjust Left Column to Stay Inside Second Screen**
+                // Left column
                 posX = browserX;
-                posY = browserY + screenHeight - ((index - ((maxWindowsPerSide * 2) + maxVerticalWindows) + 1) * (windowHeight + spacing)) - (2 * windowHeight);
+                posY = browserY + screenHeight - ((index - ((maxWindowsPerSide * 2) + maxVerticalWindows) + 1) * (windowHeight + spacing));
             }
 
             setTimeout(() => {
@@ -495,7 +495,7 @@
                 }
 
                 openNextWindow(index + 1, callback);
-            }, 10); // Small delay between opening each window
+            }, 10);
         }
 
         function closeAllWindows(callback) {
@@ -513,13 +513,12 @@
                 console.log(`Starting frame ${iterationCount + 1} in 5 minutes...`);
                 setTimeout(() => {
                     openNextWindow(0, callback);
-                }, 300000); // Wait 5 minutes before reopening
+                }, 300000);
             } else {
                 console.log("✅ Completed 5 iterations. Stopping.");
             }
         }
 
-        // Start the first frame
         openNextWindow(0, () => {
             console.log("First frame started.");
         });
@@ -528,6 +527,7 @@
         console.error('Error fetching the JSON data:', error);
     }
 });
+
 
 
 
