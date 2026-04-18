@@ -441,6 +441,7 @@ document.getElementById('yes-button').addEventListener('click', async () => {
         const windowWidth = 300;
         const windowHeight = 100;
         const spacing = -70;
+        const topRowOffset = 80; // Change this to move the first row lower; set to 0 to restore the original position.
 
         const maxWindowsPerSide = Math.floor(screenWidth / (windowWidth + spacing));
         const maxVerticalWindows = Math.floor(screenHeight / (windowHeight + spacing));
@@ -470,11 +471,11 @@ document.getElementById('yes-button').addEventListener('click', async () => {
             if (index < maxWindowsPerSide) {
                 // Top row (left to right)
                 posX = browserX + (index * (windowWidth + spacing));
-                posY = browserY;
+                posY = browserY + topRowOffset;
             } else if (index < maxWindowsPerSide + maxVerticalWindows) {
                 // Right column (top to bottom)
                 posX = browserX + screenWidth - windowWidth;
-                posY = browserY + (index - maxWindowsPerSide) * (windowHeight + spacing);
+                posY = browserY + topRowOffset + (index - maxWindowsPerSide) * (windowHeight + spacing);
             } else if (index < (maxWindowsPerSide * 2) + maxVerticalWindows) {
                 // Bottom row (right to left) - Shifted one row down
                 posX = browserX + screenWidth - ((index - (maxWindowsPerSide + maxVerticalWindows) + 1) * (windowWidth + spacing));
@@ -482,7 +483,7 @@ document.getElementById('yes-button').addEventListener('click', async () => {
             } else {
                 // Left column (bottom to top)
                 posX = browserX;
-                posY = browserY + screenHeight - ((index - ((maxWindowsPerSide * 2) + maxVerticalWindows) + 1) * (windowHeight + spacing));
+                posY = browserY + topRowOffset + screenHeight - ((index - ((maxWindowsPerSide * 2) + maxVerticalWindows) + 1) * (windowHeight + spacing));
             }
 
             setTimeout(() => {
